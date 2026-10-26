@@ -1,0 +1,22 @@
+# Cobra · voice-to-invoice Telegram bot on PayPal.
+# Secrets (wrangler secret put): BOT_TOKEN, WEBHOOK_SECRET, PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_WEBHOOK_ID
+name = "cobra-bot"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+preview_urls = false
+
+[vars]
+PAYPAL_ENV = "sandbox"   # "sandbox" or "live"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cobra-bot"
+database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
+migrations_dir = "migrations"
+
+[ai]
+binding = "AI"  # Workers AI: Whisper (speech to text) and Llama (understanding)
+
+[observability]
+enabled = true
