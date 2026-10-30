@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Cobra">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1FC97F"/>
+      <stop offset="1" stop-color="#0A8A58"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- Invoice -->
+  <path fill="#FFFFFF" d="M152 76H360Q384 76 384 100V436L358 412L332 436L307 412L282 436L256 412L230 436L205 412L180 436L154 412L128 436V100Q128 76 152 76Z"/>
+  <!-- Voice note -->
+  <g fill="#0B6B47">
+    <rect x="164" y="192" width="26" height="72" rx="13"/>
+    <rect x="207" y="158" width="26" height="140" rx="13"/>
+    <rect x="250" y="126" width="26" height="204" rx="13"/>
+    <rect x="293" y="158" width="26" height="140" rx="13"/>
+    <rect x="336" y="192" width="26" height="72" rx="13"/>
+  </g>
+  <!-- Paid -->
+  <circle cx="378" cy="378" r="74" fill="#0B6B47" stroke="#FFFFFF" stroke-width="16"/>
+  <path fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" d="M344 380l24 24l46-52"/>
+</svg>

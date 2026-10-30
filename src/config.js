@@ -16,6 +16,7 @@ export function loadConfig(vars = globalThis.process?.env ?? {}) {
     },
     maxAudioSeconds: Number(env('MAX_AUDIO_SECONDS', 120)), // invoices are short; keeps the free Workers AI quota safe
     audioSecondsPerDay: Number(env('AUDIO_SECONDS_PER_DAY', 300)),
+    aiCallsPerDay: Number(env('AI_CALLS_PER_DAY', 80)), // whole bot, all users
     maxAmount: Number(env('MAX_AMOUNT', 100000)),
   };
 }

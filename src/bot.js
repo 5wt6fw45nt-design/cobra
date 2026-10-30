@@ -6,7 +6,8 @@ import { transcribe, understand, applyFix, writeReminder, cleanEmail } from './a
 import { PayPalError } from './paypal.js';
 import { CURRENCIES } from './config.js';
 
-const DAY = 86_400_000;
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
 const ymd = (ms) => new Date(ms).toISOString().slice(0, 10);
 const daysBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY);
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{N} ]/gu, '').trim();
@@ -344,7 +345,30 @@ export function createBot({ api, db, cfg, paypal, ai = null, clock = Date.now, h
     return status.toLowerCase();
   }
 
+  /** Called every minute by the clock; works once an hour. Catches missed webhooks and warns once about each overdue invoice. */
+  async function tick(now) {
+    const slot = String(Math.floor(now / HOUR));
+    if (await db.kvGet('tick:slot') === slot) return 'idle';
+    await db.kvSet('tick:slot', slot);
+    const today = ymd(now);
+    for (const inv of await db.openInvoices(12)) {
+      const st = (await paypal.getInvoice(inv.paypal_id).catch(() => null))?.status;
+      const u = await db.getUser(inv.user_id);
+      const t = T(u?.lang);
+      if (st === 'PAID' || st === 'MARKED_AS_PAID') {
+        if (await db.setStatus(inv.id, 'PAID', now)) await reply(inv.user_id, t.paid(inv, u?.lang)).catch((e) => console.error('[tick]', e.message));
+      } else if (st === 'CANCELLED') {
+        await db.setStatus(inv.id, 'CANCELLED', now);
+      } else if (st && inv.due_date && inv.due_date < today && !(await db.kvGet(`overdue:${inv.id}`))) {
+        await db.kvSet(`overdue:${inv.id}`, today);
+        await reply(inv.user_id, t.overdueAlert(inv, u?.lang), kb([[{ text: t.btnRemind(inv.client_name.split(' ')[0]), callback_data: `rem:${inv.id}` }]])).catch((e) => console.error('[tick]', e.message));
+      }
+    }
+    return 'done';
+  }
+
   return {
+    tick,
     async handleUpdate(update) {
       const now = clock();
       if (update.message) return handleMessage(update.message, now);

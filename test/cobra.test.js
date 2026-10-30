@@ -5,7 +5,8 @@ import { d1Shim } from '../scripts/d1-shim.js';
 import { createBot } from '../src/bot.js';
 import { loadConfig } from '../src/config.js';
 import { createPayPal, decodeQr, PayPalError } from '../src/paypal.js';
-import { cleanEmail, normalizeDraft } from '../src/ai.js';
+import { budgetedAi, cleanEmail, normalizeDraft } from '../src/ai.js';
+import { verifyInitData, toCsv, toRow } from '../src/webapp.js';
 
 const T0 = Date.UTC(2026, 9, 27, 10, 0); // 27 Oct 2026
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...new Array(120).fill(1)]);
@@ -282,6 +283,74 @@ test('voice notes are transcribed and capped', async () => {
   assert.match(s.last().text, /Borrador|correo de Marta/);
   await s.msg(undefined, { voice: { file_id: 'f', duration: 9999 } });
   assert.match(s.last().text, /un poco largo/);
+});
+
+test('the clock warns once about overdue invoices and catches missed webhooks', async () => {
+  const s = setup();
+  await s.msg('Factura a Marta, marta@gmail.com, 350 euros');
+  await s.tap(s.buttons()[0].callback_data);
+  const before = s.sent.length;
+  assert.equal(await s.bot.tick(T0 + 3_600_000), 'done');
+  assert.equal(await s.bot.tick(T0 + 3_600_000), 'idle');
+  assert.equal(s.sent.length, before, 'not due yet: nothing to say');
+
+  const late = T0 + 20 * 86_400_000;
+  await s.bot.tick(late);
+  assert.match(s.last().text, /Marta García aún no ha pagado/);
+  assert.ok(s.buttons().some((b) => b.callback_data === 'rem:1'));
+  const warned = s.sent.length;
+  await s.bot.tick(late + 3_600_000);
+  assert.equal(s.sent.length, warned, 'only one warning per invoice');
+
+  s.pp.status = 'PAID';
+  await s.bot.tick(late + 7_200_000);
+  assert.match(s.last().text, /te ha pagado/);
+  const paid = s.sent.length;
+  await s.bot.tick(late + 10_800_000);
+  assert.equal(s.sent.length, paid, 'paid invoices are left alone');
+});
+
+async function signInitData(fields, token) {
+  const enc = new TextEncoder();
+  const mac = async (key, msg) => {
+    const k = await crypto.subtle.importKey('raw', typeof key === 'string' ? enc.encode(key) : key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return new Uint8Array(await crypto.subtle.sign('HMAC', k, enc.encode(msg)));
+  };
+  const check = Object.entries(fields).map(([k, v]) => `${k}=${v}`).sort().join('\n');
+  const hash = Buffer.from(await mac(await mac('WebAppData', token), check)).toString('hex');
+  return new URLSearchParams({ ...fields, hash }).toString();
+}
+
+test('Mini App: only initData signed with our token gets in, and it expires', async () => {
+  const fields = { auth_date: '1000', query_id: 'q', user: JSON.stringify({ id: 42, first_name: 'Ana & Co' }) };
+  const good = await signInitData(fields, 'TOKEN');
+  assert.equal((await verifyInitData(good, 'TOKEN', 2000)).id, 42);
+  assert.equal(await verifyInitData(good, 'OTHER', 2000), null);
+  assert.equal(await verifyInitData(good.replace('42', '43'), 'TOKEN', 2000), null, 'tampered');
+  assert.equal(await verifyInitData(good, 'TOKEN', 1000 + 90_000), null, 'expired');
+  assert.equal(await verifyInitData('', 'TOKEN', 2000), null);
+});
+
+test('CSV: amounts stay numbers, commas are quoted, formulas are defused', () => {
+  const row = toRow({ id: 1, number: '0001', client_name: '=HYPERLINK("x")', client_email: 'a@b.c', description: 'Logo, v2', amount_cents: 35050, currency: 'EUR', due_date: null, status: 'PAID', created_at: T0, paid_at: T0, pay_url: null });
+  const [head, line] = toCsv([row]).split('\r\n');
+  assert.match(head, /^number,client,email/);
+  assert.match(line, /^0001,"'=HYPERLINK\(""x""\)",a@b\.c,"Logo, v2",350\.5,EUR,PAID,2026-10-27,,2026-10-27$/);
+});
+
+test('the daily AI budget is shared by all users and resets the next day', async () => {
+  const kv = new Map();
+  const db = { kvGet: async (k) => kv.get(k) ?? null, kvSet: async (k, v) => kv.set(k, String(v)) };
+  let now = T0;
+  let calls = 0;
+  const ai = budgetedAi({ run: async () => ++calls }, db, 2, () => now);
+  await ai.run('m', {});
+  await ai.run('m', {});
+  await assert.rejects(ai.run('m', {}), /budget/);
+  assert.equal(calls, 2);
+  now += 86_400_000;
+  await ai.run('m', {});
+  assert.equal(calls, 3);
 });
 
 test('settings: language and currency; English users get English', async () => {

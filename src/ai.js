@@ -87,6 +87,19 @@ export function normalizeDraft(d, { currency, today }) {
   };
 }
 
+/** Workers AI with a daily limit for the whole bot: the free quota is shared with other Workers on the account. */
+export function budgetedAi(ai, db, limit, clock = Date.now) {
+  return {
+    async run(model, input) {
+      const key = `aicalls:${new Date(clock()).toISOString().slice(0, 10)}`;
+      const used = Number(await db.kvGet(key)) || 0;
+      if (used >= limit) throw new Error('daily AI budget reached');
+      await db.kvSet(key, used + 1);
+      return ai.run(model, input);
+    },
+  };
+}
+
 export const addDays = (ymd, n) => new Date(Date.parse(`${ymd}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 async function askJson(ai, system, user, maxTokens = 600) {

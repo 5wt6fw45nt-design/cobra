@@ -61,6 +61,7 @@ export function createDb(d1) {
     },
     markReminded: (id, now) => run('UPDATE invoices SET reminded_at = ? WHERE id = ?', now, id),
     unpaid: (userId) => all("SELECT * FROM invoices WHERE user_id = ? AND status = 'SENT' ORDER BY COALESCE(due_date, '9999') ASC, id ASC LIMIT 30", userId),
+    openInvoices: (limit) => all("SELECT * FROM invoices WHERE status = 'SENT' ORDER BY COALESCE(due_date, '9999') ASC, id ASC LIMIT ?", limit),
     invoices: (userId, limit = 500) => all('SELECT * FROM invoices WHERE user_id = ? ORDER BY id DESC LIMIT ?', userId, limit),
     /** Totals per currency paid and billed since a timestamp. */
     totals: (userId, since) => all(

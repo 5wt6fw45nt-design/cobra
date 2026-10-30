@@ -12,7 +12,7 @@ PAYPAL_ENV = "sandbox"   # "sandbox" or "live"
 [[d1_databases]]
 binding = "DB"
 database_name = "cobra-bot"
-database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
+database_id = "a246ee49-9916-400b-827d-59093b4664d6"
 migrations_dir = "migrations"
 
 [ai]

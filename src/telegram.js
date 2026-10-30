@@ -25,7 +25,17 @@ export function createApi(token, fetchFn = fetch) {
     if (!data.ok) throw new Error(`sendPhoto: ${data.description}`);
     return data.result;
   }
-  return { call, sendPhotoBytes, fileUrl: (path) => `https://api.telegram.org/file/bot${token}/${path}` };
+  /** sendDocument with text content, e.g. a CSV. */
+  async function sendTextFile(chatId, text, filename, caption) {
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    form.append('document', new Blob([text], { type: 'text/csv' }), filename);
+    if (caption) form.append('caption', caption);
+    const data = await (await fetchFn(base + 'sendDocument', { method: 'POST', body: form })).json();
+    if (!data.ok) throw new Error(`sendDocument: ${data.description}`);
+    return data.result;
+  }
+  return { call, sendPhotoBytes, sendTextFile, fileUrl: (path) => `https://api.telegram.org/file/bot${token}/${path}` };
 }
 
 export const message = (chatId, text, extra = {}) => ({
