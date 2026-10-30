@@ -27,9 +27,10 @@ Freelancers lose unpaid hours writing invoices and chasing late payments, and mo
 
 ## Try it
 
-- Bot: **@REPLACE_BOT_USERNAME** on Telegram (PayPal **sandbox**: no real money moves).
-- To pay an invoice as a client, open the payment link and log in with this sandbox buyer account:
-  - Email: `REPLACE_SANDBOX_BUYER_EMAIL`
+- Bot: **[@CobraInvoice_bot](https://t.me/CobraInvoice_bot)** on Telegram (PayPal **sandbox**: no real money moves). Open the **📊 Invoices** button for the dashboard.
+- **Fastest way**: after sending an invoice, tap **🧪 Simulate payment (sandbox)**. Cobra records a test payment through PayPal's API and the alert arrives through the real webhook. This button only exists in sandbox mode.
+- To pay an invoice as a client instead, open the payment link and log in with this sandbox buyer account:
+  - Email: `sb-e29hh53116545@personal.example.com`
   - Password: `REPLACE_SANDBOX_BUYER_PASSWORD`
 - Use your own email as the client's email to receive the invoice, or use the payment link Cobra shows after sending.
 

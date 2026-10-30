@@ -10,6 +10,7 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const ymd = (ms) => new Date(ms).toISOString().slice(0, 10);
 const daysBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY);
+const firstName = (name) => String(name).split(' ')[0];
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{N} ]/gu, '').trim();
 
 export function createBot({ api, db, cfg, paypal, ai = null, clock = Date.now, http = (...a) => fetch(...a), stt = transcribe, nlu = understand, fixer = applyFix, reminderWriter = writeReminder }) {
@@ -93,6 +94,7 @@ export function createBot({ api, db, cfg, paypal, ai = null, clock = Date.now, h
       await db.deleteDraft(draftId);
       const rows = [[{ text: t.btnQr, callback_data: `qr:${id}` }]];
       if (payUrl) rows.push([{ text: t.btnPayLink, url: payUrl }]);
+      if (cfg.paypal.sandbox) rows.push([{ text: t.btnSimulate(firstName(inv.client_name)), callback_data: `sim:${id}` }]);
       return edit(chatId, messageId, t.sent(inv, u.lang), kb(rows));
     } catch (e) {
       console.error('[send]', e.message);
@@ -127,9 +129,28 @@ export function createBot({ api, db, cfg, paypal, ai = null, clock = Date.now, h
       const d = inv.due_date ? daysBetween(today, inv.due_date) : null;
       const when = d === null ? '' : d < 0 ? ` · ${t.overdue(-d)}` : ` · ${t.dueIn(d)}`;
       lines.push(`• <b>${esc(inv.client_name)}</b> · ${new Intl.NumberFormat(u.lang === 'es' ? 'es-ES' : 'en-US', { style: 'currency', currency: inv.currency }).format(inv.amount_cents / 100)} · ${esc(inv.description)}${when}${inv.reminded_at ? ` · 🔔 ${t.reminded}` : ''}`);
-      if (rows.length < 8) rows.push([{ text: t.btnRemind(inv.client_name.split(' ')[0]), callback_data: `rem:${inv.id}` }, { text: '📱 QR', callback_data: `qr:${inv.id}` }]);
+      if (rows.length < 8) {
+        rows.push([{ text: t.btnRemind(firstName(inv.client_name)), callback_data: `rem:${inv.id}` }, { text: '📱 QR', callback_data: `qr:${inv.id}` }]);
+        if (cfg.paypal.sandbox) rows.push([{ text: t.btnSimulate(firstName(inv.client_name)), callback_data: `sim:${inv.id}` }]);
+      }
     }
     return reply(chatId, lines.join('\n'), kb(rows));
+  }
+
+  /** Sandbox only: lets anyone try the whole cycle without PayPal's test logins. The alert still comes from the real webhook. */
+  async function simulatePayment(chatId, u, invId, now) {
+    const t = T(u.lang);
+    if (!cfg.paypal.sandbox) return null;
+    const inv = await db.getInvoice(invId, u.id);
+    if (!inv) return reply(chatId, t.gone);
+    if (inv.status !== 'SENT') return reply(chatId, t.alreadyPaid(inv));
+    try {
+      await paypal.recordPayment(inv.paypal_id, { cents: inv.amount_cents, currency: inv.currency, date: ymd(now) });
+      return reply(chatId, t.simulated);
+    } catch (e) {
+      console.error('[simulate]', e.message);
+      return reply(chatId, e instanceof PayPalError && e.status < 500 ? t.ppFail(e.message) : t.ppDown);
+    }
   }
 
   async function sendMonth(chatId, u, now) {
@@ -284,6 +305,7 @@ export function createBot({ api, db, cfg, paypal, ai = null, clock = Date.now, h
       case 'rem': return previewReminder(chatId, u, id, now);
       case 'remok': return sendReminder(chatId, messageId, u, id, now);
       case 'qr': return sendQr(chatId, u, id);
+      case 'sim': return simulatePayment(chatId, u, id, now);
       case 'lang': {
         await db.setLang(u.id, arg === 'es' ? 'es' : 'en');
         u = await db.getUser(u.id);
@@ -361,7 +383,7 @@ export function createBot({ api, db, cfg, paypal, ai = null, clock = Date.now, h
         await db.setStatus(inv.id, 'CANCELLED', now);
       } else if (st && inv.due_date && inv.due_date < today && !(await db.kvGet(`overdue:${inv.id}`))) {
         await db.kvSet(`overdue:${inv.id}`, today);
-        await reply(inv.user_id, t.overdueAlert(inv, u?.lang), kb([[{ text: t.btnRemind(inv.client_name.split(' ')[0]), callback_data: `rem:${inv.id}` }]])).catch((e) => console.error('[tick]', e.message));
+        await reply(inv.user_id, t.overdueAlert(inv, u?.lang), kb([[{ text: t.btnRemind(firstName(inv.client_name)), callback_data: `rem:${inv.id}` }]])).catch((e) => console.error('[tick]', e.message));
       }
     }
     return 'done';

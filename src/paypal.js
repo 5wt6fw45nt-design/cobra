@@ -101,6 +101,13 @@ export function createPayPal({ base, clientId, secret, webhookId }, fetchFn = (.
 
     getInvoice: (id) => request('GET', `/v2/invoicing/invoices/${encodeURIComponent(id)}`),
 
+    /** Records an external payment. PayPal then fires INVOICING.INVOICE.PAID, as for a real one. */
+    recordPayment: (id, { cents, currency, date }) => request('POST', `/v2/invoicing/invoices/${encodeURIComponent(id)}/payments`, {
+      method: 'OTHER',
+      payment_date: date,
+      amount: { currency_code: currency, value: (cents / 100).toFixed(2) },
+    }),
+
     remindInvoice: (id, { subject, note } = {}) => request('POST', `/v2/invoicing/invoices/${encodeURIComponent(id)}/remind`, {
       send_to_invoicer: false,
       send_to_recipient: true,

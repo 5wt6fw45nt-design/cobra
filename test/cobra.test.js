@@ -147,6 +147,7 @@ function setup({ paidStatus = 'SENT' } = {}) {
     async sendInvoice(id) { pp.calls.push(['send', id]); return { payUrl: `https://pay/${id}` }; },
     async getInvoice(id) { pp.calls.push(['get', id]); return { id, status: pp.status }; },
     async remindInvoice(id, o) { pp.calls.push(['remind', id, o]); return {}; },
+    async recordPayment(id, o) { pp.calls.push(['pay', id, o]); return {}; },
     async qrCode(id) { pp.calls.push(['qr', id]); return PNG; },
   };
   let now = T0;
@@ -164,7 +165,7 @@ function setup({ paidStatus = 'SENT' } = {}) {
   const tap = (data, message_id = 1) => bot.handleUpdate({ callback_query: { id: 'c', from, data, message: { message_id, chat: { id: ME } } } });
   const last = () => sent.at(-1);
   const buttons = (m = last()) => (m.reply_markup?.inline_keyboard || []).flat();
-  return { db, bot, sent, pp, msg, tap, last, buttons, ME, at: (t) => (now = t) };
+  return { cfg, db, bot, sent, pp, msg, tap, last, buttons, ME, at: (t) => (now = t) };
 }
 
 test('voice/text → draft with buttons → send → PayPal invoice, client remembered', async () => {
@@ -283,6 +284,29 @@ test('voice notes are transcribed and capped', async () => {
   assert.match(s.last().text, /Borrador|correo de Marta/);
   await s.msg(undefined, { voice: { file_id: 'f', duration: 9999 } });
   assert.match(s.last().text, /un poco largo/);
+});
+
+test('sandbox: simulate a payment through PayPal; only the owner, never in live mode', async () => {
+  const s = setup();
+  await s.msg('Factura a Marta, marta@gmail.com, 350 euros');
+  await s.tap(s.buttons()[0].callback_data);
+  assert.ok(s.buttons().some((b) => b.callback_data === 'sim:1'), 'offered after sending');
+
+  await s.bot.handleUpdate({ callback_query: { id: 'c', from: { id: 99, first_name: 'Eve' }, data: 'sim:1', message: { message_id: 1, chat: { id: 99 } } } });
+  assert.ok(!s.pp.calls.some((c) => c[0] === 'pay'), 'someone else cannot pay it');
+
+  await s.tap('sim:1');
+  const pay = s.pp.calls.find((c) => c[0] === 'pay');
+  assert.deepEqual(pay.slice(1), ['INV2-1', { cents: 35000, currency: 'EUR', date: '2026-10-27' }]);
+  assert.match(s.last().text, /Pago de prueba/);
+
+  const live = setup();
+  live.cfg.paypal.sandbox = false;
+  await live.msg('Factura a Marta, marta@gmail.com, 350 euros');
+  await live.tap(live.buttons()[0].callback_data);
+  assert.ok(!live.buttons().some((b) => b.callback_data === 'sim:1'), 'no button in live mode');
+  await live.tap('sim:1');
+  assert.ok(!live.pp.calls.some((c) => c[0] === 'pay'), 'ignored in live mode');
 });
 
 test('the clock warns once about overdue invoices and catches missed webhooks', async () => {
