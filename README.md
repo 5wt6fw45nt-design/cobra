@@ -27,7 +27,7 @@ Freelancers lose unpaid hours writing invoices and chasing late payments, and mo
 
 ## Demo video
 
-[Watch Cobra in 2 minutes](https://youtu.be/WFGGjIXQCSA)
+[Watch Cobra in 2 minutes](https://youtu.be/gVgyco7rMdo)
 
 ## Try it
 
