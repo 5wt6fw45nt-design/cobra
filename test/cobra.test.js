@@ -5,7 +5,7 @@ import { d1Shim } from '../scripts/d1-shim.js';
 import { createBot } from '../src/bot.js';
 import { loadConfig } from '../src/config.js';
 import { createPayPal, decodeQr, PayPalError } from '../src/paypal.js';
-import { budgetedAi, cleanEmail, normalizeDraft } from '../src/ai.js';
+import { budgetedAi, cleanEmail, normalizeDraft, transcribe } from '../src/ai.js';
 import { verifyInitData, toCsv, toRow } from '../src/webapp.js';
 
 const T0 = Date.UTC(2026, 9, 27, 10, 0); // 27 Oct 2026
@@ -121,7 +121,7 @@ const fakeNlu = async (_ai, text, ctx) => {
   if (/cuanto he cobrado/.test(n.normalize('NFD').replace(/[̀-ͯ]/g, ''))) return { intent: 'summary', draft: null, reply: '' };
   if (/marta/.test(n)) {
     const email = /marta@/.test(n) ? 'marta@gmail.com' : null;
-    return { intent: 'invoice', reply: '', draft: normalizeDraft({ client_name: 'Marta García', client_email: email, items: [{ name: 'Diseño del logo', amount: 350 }], due_days: 15 }, ctx) };
+    return { intent: 'invoice', lang: /^bill/.test(n) ? 'en' : /^factura/.test(n) ? 'es' : null, reply: '', draft: normalizeDraft({ client_name: 'Marta García', client_email: email, items: [{ name: 'Diseño del logo', amount: 350 }], due_days: 15 }, ctx) };
   }
   return { intent: 'chat', draft: null, reply: 'Hola 👋' };
 };
@@ -284,6 +284,24 @@ test('voice notes are transcribed and capped', async () => {
   assert.match(s.last().text, /Borrador|correo de Marta/);
   await s.msg(undefined, { voice: { file_id: 'f', duration: 9999 } });
   assert.match(s.last().text, /un poco largo/);
+});
+
+test('replies follow the language of the message, and it sticks', async () => {
+  const s = setup();
+  await s.msg('Bill Marta, marta@gmail.com, 350 for the logo');
+  assert.match(s.last().text, /Invoice draft/);
+  assert.equal((await s.db.getUser(s.ME)).lang, 'en');
+  await s.msg('Marta 350');
+  assert.match(s.last().text, /What's|Invoice draft/, 'too short to tell: stays in English');
+  await s.msg('Factura a Marta, marta@gmail.com, 350 euros');
+  assert.match(s.last().text, /Borrador de factura/);
+  assert.equal((await s.db.getUser(s.ME)).lang, 'es');
+});
+
+test('Whisper is left to detect the language', async () => {
+  let input;
+  await transcribe({ run: async (_m, i) => { input = i; return { text: 'hi' }; } }, new Uint8Array([1]));
+  assert.equal('language' in input, false);
 });
 
 test('sandbox: simulate a payment through PayPal; only the owner, never in live mode', async () => {

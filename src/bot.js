@@ -220,7 +220,7 @@ export function createBot({ api, db, cfg, paypal, ai = null, clock = Date.now, h
 
   /** Everything the user says (typed or transcribed) ends here. */
   async function handleText(chatId, u, text, now, statusId = null) {
-    const t = T(u.lang);
+    let t = T(u.lang);
     const say = (s, extra) => (statusId ? edit(chatId, statusId, s, extra) : reply(chatId, s, extra));
 
     // Answers to a question we asked
@@ -251,6 +251,12 @@ export function createBot({ api, db, cfg, paypal, ai = null, clock = Date.now, h
 
     const a = await nlu(ai, text, await ctxOf(u, now));
     if (!a) return say(t.aiFail);
+    // Answer in the language they just used, and keep it for alerts and buttons
+    if (a.lang && a.lang !== u.lang) {
+      await db.setLang(u.id, a.lang);
+      u = { ...u, lang: a.lang };
+      t = T(a.lang);
+    }
     if (a.intent === 'invoice') return showDraft(chatId, u, a.draft, text, now, statusId);
     if (statusId) await api.call('deleteMessage', { chat_id: chatId, message_id: statusId }).catch(() => {});
     if (a.intent === 'debtors') return sendOwed(chatId, u, now);
@@ -271,7 +277,7 @@ export function createBot({ api, db, cfg, paypal, ai = null, clock = Date.now, h
     try {
       const file = await api.call('getFile', { file_id: v.file_id });
       const bytes = await (await http(api.fileUrl(file.file_path))).arrayBuffer();
-      const heard = await stt(ai, bytes, u.lang);
+      const heard = await stt(ai, bytes);
       await db.kvSet(key, used + Math.max(1, heard.seconds || v.duration || 1));
       if (!heard.text) return edit(chatId, status.message_id, t.aiFail);
       return handleText(chatId, u, heard.text, now, status.message_id);

@@ -25,14 +25,16 @@ Nothing is ever sent to a client without your tap.
 
 Freelancers lose unpaid hours writing invoices and chasing late payments, and most of them run their business from a phone and a chat app, not from accounting software. Cobra puts PayPal invoicing where they already are, and turns the boring part into a 10-second voice note.
 
+## Demo video
+
+[Watch Cobra in 2 minutes](https://youtu.be/WFGGjIXQCSA)
+
 ## Try it
 
 - Bot: **[@CobraInvoice_bot](https://t.me/CobraInvoice_bot)** on Telegram (PayPal **sandbox**: no real money moves). Open the **📊 Invoices** button for the dashboard.
 - **Fastest way**: after sending an invoice, tap **🧪 Simulate payment (sandbox)**. Cobra records a test payment through PayPal's API and the alert arrives through the real webhook. This button only exists in sandbox mode.
-- To pay an invoice as a client instead, open the payment link and log in with this sandbox buyer account:
-  - Email: `sb-e29hh53116545@personal.example.com`
-  - Password: `REPLACE_SANDBOX_BUYER_PASSWORD`
-- Use your own email as the client's email to receive the invoice, or use the payment link Cobra shows after sending.
+- To pay as a client instead, open **🔗 Payment page** and log in with any PayPal **sandbox** personal account (developer.paypal.com → Testing Tools → Sandbox Accounts).
+- Use an `example.com` address, or your own, as the client's email.
 
 ## How it works
 

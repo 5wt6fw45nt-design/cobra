@@ -14,9 +14,9 @@ const b64 = (bytes) => {
   return btoa(s);
 };
 
-/** Audio bytes → { text, seconds }. Throws on failure. */
-export async function transcribe(ai, bytes, lang) {
-  const out = await ai.run(STT, { audio: b64(bytes), ...(lang ? { language: lang } : {}), vad_filter: true });
+/** Audio bytes → { text, seconds }. Whisper detects the language itself: people switch. Throws on failure. */
+export async function transcribe(ai, bytes) {
+  const out = await ai.run(STT, { audio: b64(bytes), vad_filter: true });
   return { text: String(out?.text || '').trim(), seconds: Math.round(Number(out?.transcription_info?.duration || 0)) };
 }
 
@@ -32,7 +32,7 @@ export function cleanEmail(s) {
 }
 
 const SYSTEM = ({ today, currency, lang, clients }) => `You are Cobra, a Telegram assistant that creates and sends PayPal invoices for freelancers.
-The user speaks ${lang === 'es' ? 'Spanish' : 'English'} (they may switch). Today is ${today}. Their default currency is ${currency}.
+The user usually speaks ${lang === 'es' ? 'Spanish' : 'English'}, but they may switch: always follow the language of this message. Today is ${today}. Their default currency is ${currency}.
 Classify the message:
 - "invoice": they want to bill/charge/invoice someone ("factura a Marta 300 euros por el logo", "bill John $500 for the website", "cóbrale a Pedro 50 de la clase").
 - "debtors": they ask who owes them, what is unpaid or overdue ("¿quién me debe?", "what's pending?").
@@ -41,14 +41,15 @@ Classify the message:
 - "chat": greetings, thanks, jokes, anything else. Answer in "reply".
 Return ONLY JSON:
 {"intent": "invoice"|"debtors"|"summary"|"help"|"chat",
+ "language": "es" or "en", the language of this message; null if it is too short to tell (only a name, a number, "ok"),
  "client_name": "person or company to bill, as said",
  "client_email": "email if said (spoken emails like 'marta arroba gmail punto com' → marta@gmail.com), else null",
- "items": [{"name": "short description of the work, in the user's language, capitalized", "amount": number (unit price, no symbols), "qty": number}],
+ "items": [{"name": "short description of the work, in the language of this message, capitalized", "amount": number (unit price, no symbols), "qty": number}],
  "currency": "ISO code if they said one (euros → EUR, dollars → USD, pounds → GBP, pesos → MXN), else null",
  "due_days": number of days to pay if said ("en 15 días", "net 30"), else null,
  "due_date": "YYYY-MM-DD if they said a date ('before Friday', 'el 30 de noviembre'), else null",
  "note": "message to the client if they dictated one, else null",
- "reply": "only for chat: one or two friendly sentences in the user's language; never invent facts"}
+ "reply": "only for chat: one or two friendly sentences in the language of this message; never invent facts"}
 Rules:
 - Several things for the same client are several items. "two hours at 40" → {"amount": 40, "qty": 2}.
 - Numbers said in words become numbers ("trescientos cincuenta" → 350, "one fifty" → 150).
@@ -112,13 +113,13 @@ async function askJson(ai, system, user, maxTokens = 600) {
   return d && typeof d === 'object' ? d : null;
 }
 
-/** Text → { intent, draft, reply }. Returns null if the AI fails. */
+/** Text → { intent, lang, draft, reply }. Returns null if the AI fails. */
 export async function understand(ai, text, ctx) {
   try {
     const d = await askJson(ai, SYSTEM(ctx), text);
     if (!d) return null;
     const intent = ['invoice', 'debtors', 'summary', 'help', 'chat'].includes(d.intent) ? d.intent : 'chat';
-    return { intent, draft: intent === 'invoice' ? normalizeDraft(d, ctx) : null, reply: String(d.reply || '').slice(0, 400) };
+    return { intent, lang: ['es', 'en'].includes(d.language) ? d.language : null, draft: intent === 'invoice' ? normalizeDraft(d, ctx) : null, reply: String(d.reply || '').slice(0, 400) };
   } catch (e) {
     console.error('[understand]', e.message);
     return null;
